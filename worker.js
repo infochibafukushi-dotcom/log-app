@@ -1,171 +1,23 @@
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-
-    const corsHeaders = {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type"
-    };
-
-    if (request.method === "OPTIONS") {
-      return new Response(null, { headers: corsHeaders });
+    const cors = {"Access-Control-Allow-Origin":"*","Access-Control-Allow-Methods":"GET,POST,OPTIONS,DELETE","Access-Control-Allow-Headers":"Content-Type"};
+    if (request.method === "OPTIONS") return new Response(null,{headers:cors});
+    try {
+      if (url.pathname === "/logs" && request.method === "POST") return withCors(await saveLogs(request, env), cors);
+      if (url.pathname === "/logs" && request.method === "GET") return withCors(await getLogs(url, env), cors);
+      if (url.pathname === "/report" && request.method === "GET") return withCors(await report(url, env), cors);
+      return withCors(json({ok:false,error:"not found"},404), cors);
+    } catch (e) {
+      return withCors(json({ok:false,error:String(e?.message||e)},500), cors);
     }
-
-    await env.DB.prepare(`
-      CREATE TABLE IF NOT EXISTS logs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        session_id TEXT,
-        time TEXT,
-        status TEXT,
-        lat REAL,
-        lng REAL,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP
-      )
-    `).run();
-
-    await ensureColumn(env, "logs", "session_id", "TEXT");
-    await ensureColumn(env, "logs", "created_at", "TEXT");
-
-    if (url.pathname === "/logs" && request.method === "POST") {
-      const data = await request.json();
-
-      if (!Array.isArray(data)) {
-        return json({ ok: false, message: "配列データではありません" }, 400, corsHeaders);
-      }
-
-      for (const log of data) {
-        await env.DB.prepare(
-          "INSERT INTO logs (session_id, time, status, lat, lng) VALUES (?, ?, ?, ?, ?)"
-        ).bind(
-          log.session_id || "",
-          log.time || "",
-          log.status || "",
-          log.lat ?? null,
-          log.lng ?? null
-        ).run();
-      }
-
-      return json({ ok: true, message: "保存OK", count: data.length }, 200, corsHeaders);
-    }
-
-    if (url.pathname === "/report" && request.method === "GET") {
-      const month = url.searchParams.get("month") || new Date().toISOString().slice(0, 7);
-      const start = `${month}-01T00:00:00.000Z`;
-      const endDate = nextMonth(month);
-      const end = `${endDate}-01T00:00:00.000Z`;
-
-      const result = await env.DB.prepare(
-        "SELECT * FROM logs WHERE time >= ? AND time < ? ORDER BY time ASC"
-      ).bind(start, end).all();
-
-      const logs = result.results || [];
-      const report = buildReport(logs);
-
-      return json(report, 200, corsHeaders);
-    }
-
-    if (url.pathname === "/logs" && request.method === "GET") {
-      const result = await env.DB.prepare("SELECT * FROM logs ORDER BY id DESC LIMIT 300").all();
-      return json({ ok: true, logs: result.results || [] }, 200, corsHeaders);
-    }
-
-    const result = await env.DB.prepare("SELECT * FROM logs ORDER BY id DESC LIMIT 50").all();
-    return json({
-      ok: true,
-      message: "timecard API",
-      endpoints: ["/logs", "/report?month=YYYY-MM"],
-      latest: result.results || []
-    }, 200, corsHeaders);
   }
 };
-
-async function ensureColumn(env, tableName, columnName, columnType) {
-  const info = await env.DB.prepare(`PRAGMA table_info(${tableName})`).all();
-  const exists = (info.results || []).some(col => col.name === columnName);
-  if (!exists) {
-    await env.DB.prepare(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnType}`).run();
-  }
-}
-
-function json(data, status, headers) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { ...headers, "Content-Type": "application/json; charset=utf-8" }
-  });
-}
-
-function nextMonth(month) {
-  const [y, m] = month.split("-").map(Number);
-  const d = new Date(Date.UTC(y, m, 1));
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
-}
-
-function buildReport(logs) {
-  const byDay = {};
-  const sessions = new Set();
-  let work = 0;
-  let rest = 0;
-
-  for (let i = 0; i < logs.length; i++) {
-    const log = logs[i];
-    const day = (log.time || "").slice(0, 10);
-
-    if (!byDay[day]) {
-      byDay[day] = {
-        date: day,
-        sessionIds: new Set(),
-        work_minutes: 0,
-        break_minutes: 0,
-        log_count: 0
-      };
-    }
-
-    byDay[day].log_count += 1;
-    if (log.session_id) {
-      sessions.add(log.session_id);
-      byDay[day].sessionIds.add(log.session_id);
-    }
-
-    if (i < logs.length - 1) {
-      const next = logs[i + 1];
-
-      if (log.session_id && next.session_id && log.session_id !== next.session_id) {
-        continue;
-      }
-
-      const diff = Math.max(0, Math.floor((new Date(next.time) - new Date(log.time)) / 1000 / 60));
-
-      if (log.status === "ON") {
-        work += diff;
-        byDay[day].work_minutes += diff;
-      }
-
-      if (log.status === "BREAK") {
-        rest += diff;
-        byDay[day].break_minutes += diff;
-      }
-    }
-  }
-
-  const daily = Object.values(byDay).map(d => ({
-    date: d.date,
-    session_count: d.sessionIds.size,
-    work_minutes: d.work_minutes,
-    break_minutes: d.break_minutes,
-    log_count: d.log_count
-  }));
-
-  return {
-    ok: true,
-    meta: { generated_at: new Date().toISOString() },
-    summary: {
-      session_count: sessions.size,
-      work_minutes: work,
-      break_minutes: rest,
-      log_count: logs.length
-    },
-    daily,
-    logs
-  };
-}
+function withCors(res,cors){Object.entries(cors).forEach(([k,v])=>res.headers.set(k,v));return res}
+function json(data,status=200){return new Response(JSON.stringify(data),{status,headers:{"Content-Type":"application/json; charset=utf-8"}})}
+function toNum(v){return v==null||v===""?null:Number(v)}
+async function saveLogs(request, env){const body=await request.json();const logs=Array.isArray(body.logs)?body.logs:[];for(const l of logs){await env.DB.prepare(`INSERT INTO logs (session_id,time,status,lat,lng,user_id,user_name,distance,fare,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)`).bind(l.session_id,l.time,l.status,toNum(l.lat),toNum(l.lng),l.user_id||"",l.user_name||"",toNum(l.distance),toNum(l.fare),l.created_at||new Date().toISOString()).run()}return json({ok:true,count:logs.length})}
+async function getLogs(url, env){const month=url.searchParams.get("month");const user=url.searchParams.get("user_id");let sql="SELECT * FROM logs WHERE 1=1";const params=[];if(month){sql+=" AND substr(time,1,7)=?";params.push(month)}if(user){sql+=" AND user_id=?";params.push(user)}sql+=" ORDER BY time DESC LIMIT 1000";const res=await env.DB.prepare(sql).bind(...params).all();return json({ok:true,logs:res.results||[]})}
+function dist(a,b){if(!a||!b||a.lat==null||b.lat==null)return 0;const R=6371,dLat=(b.lat-a.lat)*Math.PI/180,dLng=(b.lng-a.lng)*Math.PI/180,la1=a.lat*Math.PI/180,la2=b.lat*Math.PI/180;const x=Math.sin(dLat/2)**2+Math.cos(la1)*Math.cos(la2)*Math.sin(dLng/2)**2;return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x))}
+async function report(url, env){const month=url.searchParams.get("month")||new Date().toISOString().slice(0,7);const user=url.searchParams.get("user_id");const hourly=Number(url.searchParams.get("hourly_rate")||3000);const kmRate=Number(url.searchParams.get("km_rate")||500);let sql="SELECT * FROM logs WHERE substr(time,1,7)=?";const params=[month];if(user){sql+=" AND user_id=?";params.push(user)}sql+=" ORDER BY session_id,time ASC";const rows=(await env.DB.prepare(sql).bind(...params).all()).results||[];const dailyMap=new Map();const sessions=new Set();let work=0, br=0, distance=0;for(let i=0;i<rows.length;i++){const cur=rows[i];sessions.add(cur.session_id);const date=cur.time.slice(0,10);const key=`${date}|${cur.user_id||""}`;if(!dailyMap.has(key))dailyMap.set(key,{date,user_id:cur.user_id,user_name:cur.user_name,work_ms:0,break_ms:0,distance_km:0,sales:0,fare:0,total:0});const d=dailyMap.get(key);const next=rows[i+1];if(next && next.session_id===cur.session_id){const diff=new Date(next.time)-new Date(cur.time);if(cur.status==="ON"){work+=diff;d.work_ms+=diff}if(cur.status==="BREAK"){br+=diff;d.break_ms+=diff}const dk=dist(cur,next);distance+=dk;d.distance_km+=dk}}
+let daily=[...dailyMap.values()].map(d=>{d.sales=(d.work_ms/3600000)*hourly;d.fare=d.distance_km*kmRate;d.total=d.sales+d.fare;return d});const sales=(work/3600000)*hourly;const fare=distance*kmRate;const total=sales+fare;return json({ok:true,month,summary:{sessions:sessions.size,work_ms:work,break_ms:br,distance_km:distance,sales,fare,total,avg_unit:sessions.size?total/sessions.size:0},daily,logs:rows})}

@@ -1,276 +1,107 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>タイムカード</title>
-<style>
-body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;background:#f5f7fb;color:#111827}
-header{background:#0f172a;color:#fff;padding:16px}
-main{padding:16px;max-width:960px;margin:auto}
-.card{background:#fff;border-radius:14px;padding:16px;margin:12px 0;box-shadow:0 2px 10px rgba(0,0,0,.06)}
-h1{font-size:22px;margin:0}
-.now{font-size:18px;font-weight:700;margin-top:8px}
-.status{font-size:18px;font-weight:700}
-.btns{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-button{border:0;border-radius:12px;padding:14px;font-size:16px;font-weight:700;cursor:pointer}
-.primary{background:#2563eb;color:#fff}
-.warning{background:#f59e0b;color:#111827}
-.success{background:#16a34a;color:#fff}
-.danger{background:#dc2626;color:#fff}
-.gray{background:#e5e7eb;color:#111827}
-.summary{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.summary div{background:#f1f5f9;border-radius:12px;padding:12px}
-table{width:100%;border-collapse:collapse;background:#fff}
-th,td{border-bottom:1px solid #e5e7eb;padding:8px;text-align:center;font-size:13px}
-th{background:#f8fafc}
-.small{font-size:12px;color:#64748b}
-.notice{white-space:pre-wrap;background:#f8fafc;border-radius:12px;padding:12px;font-size:13px}
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>タイムカード</title>
+  <style>
+    :root{--bg:#f6f7fb;--card:#fff;--text:#1f2937;--muted:#6b7280;--main:#2563eb;--ok:#16a34a;--warn:#f59e0b;--danger:#dc2626;--line:#e5e7eb}
+    *{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text)}
+    .wrap{max-width:980px;margin:0 auto;padding:18px}.card{background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:0 8px 24px rgba(15,23,42,.06);padding:18px;margin:14px 0}
+    h1{font-size:24px;margin:0 0 6px}.sub{color:var(--muted);font-size:14px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+    button{border:0;border-radius:14px;padding:15px 12px;font-size:16px;font-weight:700;color:#fff;cursor:pointer}button:disabled{opacity:.45;cursor:not-allowed}.on{background:var(--ok)}.break{background:var(--warn)}.off{background:var(--danger)}.blue{background:var(--main)}.gray{background:#64748b}.ghost{background:#fff;color:var(--text);border:1px solid var(--line)}
+    .stat{background:#f8fafc;border:1px solid var(--line);border-radius:14px;padding:12px}.stat b{display:block;font-size:20px;margin-top:4px}.small{font-size:12px;color:var(--muted)}
+    table{width:100%;border-collapse:collapse;font-size:13px}th,td{border-bottom:1px solid var(--line);padding:8px;text-align:left}th{color:var(--muted);font-weight:700;background:#f8fafc}.map{width:100%;height:320px;border:0;border-radius:16px;background:#e5e7eb}.hidden{display:none!important}
+    .modal{position:fixed;inset:0;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:18px;z-index:20}.modal .box{width:min(460px,100%);background:#fff;border-radius:20px;padding:22px;box-shadow:0 20px 60px rgba(0,0,0,.25)}
+    input,select{width:100%;border:1px solid var(--line);border-radius:12px;padding:12px;font-size:16px;margin:8px 0 12px;background:#fff}.err{color:var(--danger);font-weight:700}.oktxt{color:var(--ok);font-weight:700}.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.pill{display:inline-flex;border:1px solid var(--line);background:#fff;border-radius:999px;padding:7px 10px;font-size:13px;color:var(--muted)}
+    @media(max-width:720px){.grid4{grid-template-columns:repeat(2,minmax(0,1fr))}.grid{grid-template-columns:1fr}.wrap{padding:12px}button{font-size:15px}}
+  </style>
 </head>
 <body>
-<header>
-  <h1>タイムカード</h1>
-  <div class="now" id="now">--</div>
-</header>
-
-<main>
-  <div class="card">
-    <div class="status">状態：<span id="statusText">退勤中</span></div>
-    <div class="small">出勤・休憩・再開・退勤を押すと、時刻と位置情報を記録します。</div>
-  </div>
-
-  <div class="card">
-    <div class="btns">
-      <button class="primary" onclick="startWork()">出勤</button>
-      <button class="warning" onclick="startBreak()">休憩開始</button>
-      <button class="success" onclick="resumeWork()">業務再開</button>
-      <button class="danger" onclick="endWork()">退勤・クラウド保存</button>
+  <div id="employeeModal" class="modal hidden">
+    <div class="box">
+      <h1>従業員ID入力</h1>
+      <p class="sub">個人に割り振られたIDを入力してください。</p>
+      <input id="employeeIdInput" inputmode="numeric" autocomplete="off" placeholder="例：0000" />
+      <div id="employeeError" class="err small"></div>
+      <button class="blue" id="saveEmployeeBtn" type="button">開始</button>
     </div>
   </div>
 
-  <div class="card summary">
-    <div>稼働時間<br><strong><span id="workTime">0</span> 分</strong></div>
-    <div>休憩時間<br><strong><span id="breakTime">0</span> 分</strong></div>
-  </div>
+  <div class="wrap">
+    <div class="card">
+      <h1>タイムカード</h1>
+      <div class="row">
+        <span class="pill">従業員：<b id="employeeName">未設定</b></span>
+        <span class="pill">ID：<b id="employeeId">-</b></span>
+        <button class="ghost" id="changeEmployeeBtn" type="button">ID変更</button>
+      </div>
+      <p class="sub" id="nowText"></p>
+    </div>
 
-  <div class="card">
-    <button class="gray" onclick="openLatestLocation()">最新位置を地図で開く</button>
-    <button class="gray" onclick="clearLocalLogs()">端末内ログ削除</button>
-  </div>
+    <div class="card">
+      <div class="grid4">
+        <button class="on" id="clockInBtn" type="button">出勤</button>
+        <button class="break" id="breakBtn" type="button">休憩</button>
+        <button class="blue" id="resumeBtn" type="button">再開</button>
+        <button class="off" id="clockOutBtn" type="button">退勤</button>
+      </div>
+      <p class="small" id="statusText">待機中</p>
+    </div>
 
-  <div class="card">
-    <h2>本日のログ</h2>
-    <table>
-      <thead>
-        <tr>
-          <th>日付</th>
-          <th>時刻</th>
-          <th>状態</th>
-          <th>前回差分</th>
-          <th>地図</th>
-        </tr>
-      </thead>
-      <tbody id="logTable"></tbody>
-    </table>
-  </div>
+    <div class="card">
+      <h2>本日の集計</h2>
+      <div class="grid4">
+        <div class="stat">稼働時間<b id="workTime">0:00</b></div>
+        <div class="stat">休憩時間<b id="breakTime">0:00</b></div>
+        <div class="stat">移動距離<b id="distanceText">0.00 km</b></div>
+        <div class="stat">概算売上<b id="fareText">0 円</b></div>
+      </div>
+    </div>
 
-  <div class="card">
-    <h2>送信結果</h2>
-    <div id="message" class="notice">未送信</div>
+    <div class="card">
+      <h2>地図表示</h2>
+      <iframe id="mapFrame" class="map" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
+      <p class="small">Google Mapsで現在位置または最終打刻位置を表示します。</p>
+    </div>
+
+    <div class="card">
+      <h2>ログ</h2>
+      <table><thead><tr><th>時刻</th><th>状態</th><th>緯度</th><th>経度</th></tr></thead><tbody id="logBody"></tbody></table>
+    </div>
   </div>
-</main>
 
 <script>
-const API_URL = "https://fragrant-dew-8296.info-chibafukushi.workers.dev";
+const API_BASE = "https://YOUR-WORKER-DOMAIN.workers.dev";
+const USERS = { "0000": "山本信勝" };
+const SETTINGS = { hourlyRate: 3000, distanceRatePerKm: 500 };
+const LS = { employeeId:"timecard_employee_id", employeeName:"timecard_employee_name", sessionId:"timecard_session_id", logs:"timecard_logs" };
+let logs = JSON.parse(localStorage.getItem(LS.logs) || "[]");
+let currentStatus = logs.length ? logs[logs.length - 1].status : "WAIT";
 
-let status = localStorage.getItem("timecard_status") || "OFF";
-let logs = JSON.parse(localStorage.getItem("timecard_logs") || "[]");
-let sessionId = localStorage.getItem("timecard_session_id") || "";
-
-function pad(n){return String(n).padStart(2,"0");}
-function formatDate(d){return `${d.getFullYear()}/${pad(d.getMonth()+1)}/${pad(d.getDate())}`;}
-function formatTime(d){return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;}
-function labelStatus(s){
-  if(s==="ON") return "業務中";
-  if(s==="BREAK") return "休憩中";
-  if(s==="OFF") return "退勤";
-  return s;
-}
-function updateClock(){
-  const now=new Date();
-  document.getElementById("now").textContent = `${formatDate(now)} ${formatTime(now)}`;
-}
-setInterval(updateClock,1000);
-updateClock();
-
-function updateStatus(){
-  document.getElementById("statusText").textContent = labelStatus(status);
-  localStorage.setItem("timecard_status", status);
-}
-updateStatus();
-
-function saveLocal(){
-  localStorage.setItem("timecard_logs", JSON.stringify(logs));
-  localStorage.setItem("timecard_session_id", sessionId);
-}
-
-function getLocation(){
-  return new Promise((resolve)=>{
-    if(!navigator.geolocation){
-      resolve({lat:null,lng:null});
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      pos=>resolve({lat:pos.coords.latitude,lng:pos.coords.longitude}),
-      err=>resolve({lat:null,lng:null}),
-      {enableHighAccuracy:true,timeout:10000,maximumAge:30000}
-    );
-  });
-}
-
-function createSessionIfNeeded(){
-  if(!sessionId){
-    sessionId = "session_" + Date.now() + "_" + Math.random().toString(36).slice(2);
-    localStorage.setItem("timecard_session_id", sessionId);
-  }
-}
-
-async function addLog(){
-  createSessionIfNeeded();
-  const loc = await getLocation();
-  const now = new Date();
-  logs.push({
-    session_id: sessionId,
-    time: now.toISOString(),
-    status,
-    lat: loc.lat,
-    lng: loc.lng
-  });
-  saveLocal();
-  render();
-}
-
-async function startWork(){
-  if(status !== "OFF"){
-    alert("すでに勤務中です。");
-    return;
-  }
-  status="ON";
-  updateStatus();
-  await addLog();
-}
-
-async function startBreak(){
-  if(status !== "ON"){
-    alert("業務中のみ休憩開始できます。");
-    return;
-  }
-  status="BREAK";
-  updateStatus();
-  await addLog();
-}
-
-async function resumeWork(){
-  if(status !== "BREAK"){
-    alert("休憩中のみ業務再開できます。");
-    return;
-  }
-  status="ON";
-  updateStatus();
-  await addLog();
-}
-
-async function endWork(){
-  if(status === "OFF"){
-    alert("出勤していません。");
-    return;
-  }
-  status="OFF";
-  updateStatus();
-  await addLog();
-
-  const payload = logs.slice();
-
-  try{
-    const res = await fetch(API_URL + "/logs", {
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify(payload)
-    });
-    const text = await res.text();
-    if(!res.ok) throw new Error(text);
-    document.getElementById("message").textContent = "クラウド保存完了\n" + text;
-    logs=[];
-    sessionId="";
-    saveLocal();
-    render();
-  }catch(e){
-    document.getElementById("message").textContent = "送信失敗。端末内ログは残っています。\n" + e.message;
-  }
-}
-
-function calcSummary(){
-  let work=0, rest=0;
-  for(let i=1;i<logs.length;i++){
-    const prev=logs[i-1];
-    const now=logs[i];
-    const diff=Math.max(0, Math.floor((new Date(now.time)-new Date(prev.time))/1000/60));
-    if(prev.status==="ON") work += diff;
-    if(prev.status==="BREAK") rest += diff;
-  }
-  document.getElementById("workTime").textContent = work;
-  document.getElementById("breakTime").textContent = rest;
-}
-
-function render(){
-  const tbody=document.getElementById("logTable");
-  tbody.innerHTML="";
-  for(let i=0;i<logs.length;i++){
-    const log=logs[i];
-    const d=new Date(log.time);
-    let diff=0;
-    if(i>0){
-      diff=Math.max(0, Math.floor((d-new Date(logs[i-1].time))/1000/60));
-    }
-    const mapBtn = log.lat && log.lng ? `<button class="gray" onclick="showMap(${log.lat},${log.lng})">表示</button>` : "位置なし";
-    tbody.innerHTML += `
-      <tr>
-        <td>${formatDate(d)}</td>
-        <td>${formatTime(d)}</td>
-        <td>${labelStatus(log.status)}</td>
-        <td>${diff}分</td>
-        <td>${mapBtn}</td>
-      </tr>
-    `;
-  }
-  calcSummary();
-}
-
-function showMap(lat,lng){
-  window.open(`https://www.google.com/maps?q=${lat},${lng}`,"_blank");
-}
-
-function openLatestLocation(){
-  const latest=[...logs].reverse().find(l=>l.lat&&l.lng);
-  if(!latest){alert("位置情報がありません");return;}
-  showMap(latest.lat, latest.lng);
-}
-
-function clearLocalLogs(){
-  if(!confirm("端末内ログを削除しますか？")) return;
-  logs=[];
-  sessionId="";
-  status="OFF";
-  localStorage.removeItem("timecard_logs");
-  localStorage.removeItem("timecard_session_id");
-  localStorage.setItem("timecard_status","OFF");
-  updateStatus();
-  render();
-  document.getElementById("message").textContent="端末内ログを削除しました";
-}
-
-render();
+const $ = id => document.getElementById(id);
+function pad(n){return String(n).padStart(2,"0")}
+function fmtDate(d){return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`}
+function fmtHM(ms){const m=Math.max(0,Math.floor(ms/60000));return `${Math.floor(m/60)}:${pad(m%60)}`}
+function yen(n){return `${Math.round(n).toLocaleString("ja-JP")} 円`}
+function getEmployee(){return { user_id:localStorage.getItem(LS.employeeId)||"", user_name:localStorage.getItem(LS.employeeName)||"" }}
+function ensureEmployee(){const e=getEmployee(); if(!e.user_id || !USERS[e.user_id]) $("employeeModal").classList.remove("hidden"); renderEmployee();}
+function renderEmployee(){const e=getEmployee(); $("employeeName").textContent=e.user_name||"未設定"; $("employeeId").textContent=e.user_id||"-"}
+function saveLogs(){localStorage.setItem(LS.logs, JSON.stringify(logs))}
+function sessionId(){let id=localStorage.getItem(LS.sessionId); if(!id){id=`S-${Date.now()}-${Math.random().toString(16).slice(2)}`; localStorage.setItem(LS.sessionId,id)} return id}
+function clearSession(){localStorage.removeItem(LS.sessionId)}
+function distanceKm(a,b){if(!a||!b||a.lat==null||b.lat==null)return 0;const R=6371;const dLat=(b.lat-a.lat)*Math.PI/180;const dLng=(b.lng-a.lng)*Math.PI/180;const la1=a.lat*Math.PI/180;const la2=b.lat*Math.PI/180;const x=Math.sin(dLat/2)**2+Math.cos(la1)*Math.cos(la2)*Math.sin(dLng/2)**2;return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x))}
+function calc(){let work=0, br=0, dist=0; for(let i=1;i<logs.length;i++){const prev=logs[i-1], cur=logs[i]; const diff=new Date(cur.time)-new Date(prev.time); if(prev.status==="ON") work+=diff; if(prev.status==="BREAK") br+=diff; dist+=distanceKm(prev,cur)} return {work,br,dist,sales:(work/3600000)*SETTINGS.hourlyRate, fare:dist*SETTINGS.distanceRatePerKm}}
+function updateMap(){const last=[...logs].reverse().find(x=>x.lat&&x.lng); if(!last){$("mapFrame").src="";return} $("mapFrame").src=`https://www.google.com/maps?q=${last.lat},${last.lng}&output=embed`}
+function render(){renderEmployee(); $("nowText").textContent=`現在時刻：${fmtDate(new Date())}`; const c=calc(); $("workTime").textContent=fmtHM(c.work); $("breakTime").textContent=fmtHM(c.br); $("distanceText").textContent=`${c.dist.toFixed(2)} km`; $("fareText").textContent=yen(c.sales+c.fare); $("statusText").textContent=`現在状態：${currentStatus}`; $("logBody").innerHTML=logs.map(l=>`<tr><td>${fmtDate(new Date(l.time))}</td><td>${l.status}</td><td>${l.lat??""}</td><td>${l.lng??""}</td></tr>`).join(""); updateMap(); updateButtons();}
+function updateButtons(){const s=currentStatus; $("clockInBtn").disabled=s==="ON"||s==="BREAK"; $("breakBtn").disabled=s!=="ON"; $("resumeBtn").disabled=s!=="BREAK"; $("clockOutBtn").disabled=!(s==="ON"||s==="BREAK")}
+function gps(){return new Promise(resolve=>{if(!navigator.geolocation)return resolve({lat:null,lng:null}); navigator.geolocation.getCurrentPosition(p=>resolve({lat:p.coords.latitude,lng:p.coords.longitude}),()=>resolve({lat:null,lng:null}),{enableHighAccuracy:true,timeout:10000,maximumAge:0})})}
+async function addLog(status){const e=getEmployee(); if(!e.user_id){ensureEmployee();return} const pos=await gps(); if(status==="ON" && currentStatus==="WAIT") sessionId(); const log={session_id:sessionId(),time:new Date().toISOString(),status,lat:pos.lat,lng:pos.lng,user_id:e.user_id,user_name:e.user_name,created_at:new Date().toISOString()}; logs.push(log); currentStatus=status; saveLogs(); render(); if(status==="OFF") await sendLogs();}
+async function sendLogs(){try{const res=await fetch(`${API_BASE}/logs`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({logs})}); if(!res.ok)throw new Error("send failed"); localStorage.removeItem(LS.logs); logs=[]; currentStatus="WAIT"; clearSession(); $("statusText").innerHTML='<span class="oktxt">退勤完了</span>'; render();}catch(e){$("statusText").innerHTML='<span class="err">送信失敗：端末にログを保持しています</span>';}}
+$("saveEmployeeBtn").onclick=()=>{const id=$("employeeIdInput").value.trim(); if(!USERS[id]){$("employeeError").textContent="登録されていないIDです";return} localStorage.setItem(LS.employeeId,id); localStorage.setItem(LS.employeeName,USERS[id]); $("employeeModal").classList.add("hidden"); render();};
+$("changeEmployeeBtn").onclick=()=>{$("employeeModal").classList.remove("hidden")};
+$("clockInBtn").onclick=()=>addLog("ON"); $("breakBtn").onclick=()=>addLog("BREAK"); $("resumeBtn").onclick=()=>addLog("ON"); $("clockOutBtn").onclick=()=>addLog("OFF");
+setInterval(render,1000); ensureEmployee(); render();
 </script>
 </body>
 </html>

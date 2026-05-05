@@ -1,175 +1,19 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>タイムカード管理画面</title>
+<meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>タイムカード管理</title>
 <style>
-body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;background:#f5f7fb;color:#111827}
-header{background:#0f172a;color:#fff;padding:16px}
-main{padding:16px;max-width:1100px;margin:auto}
-.card{background:#fff;border-radius:14px;padding:16px;margin:12px 0;box-shadow:0 2px 10px rgba(0,0,0,.06)}
-button,input{border-radius:10px;padding:10px;font-size:15px}
-button{border:0;background:#2563eb;color:#fff;font-weight:700;cursor:pointer}
-.gray{background:#64748b}
-table{width:100%;border-collapse:collapse;background:#fff;margin-top:12px}
-th,td{border-bottom:1px solid #e5e7eb;padding:8px;text-align:center;font-size:13px}
-th{background:#f8fafc}
-.summary{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
-.summary div{background:#f1f5f9;border-radius:12px;padding:12px}
-pre{white-space:pre-wrap;background:#f8fafc;padding:12px;border-radius:12px}
-@media(max-width:700px){.summary{grid-template-columns:1fr 1fr}table{font-size:12px}}
-</style>
-</head>
-<body>
-<header><h1>タイムカード管理画面</h1></header>
-<main>
-  <div class="card">
-    <label>対象月：</label>
-    <input type="month" id="monthInput">
-    <button onclick="loadReport()">月別レポート表示</button>
-    <button class="gray" onclick="downloadCSV()">CSV出力</button>
-  </div>
-
-  <div class="card summary">
-    <div>出勤回数<br><strong><span id="sessionCount">0</span> 回</strong></div>
-    <div>稼働時間<br><strong><span id="workTotal">0</span> 分</strong></div>
-    <div>休憩時間<br><strong><span id="breakTotal">0</span> 分</strong></div>
-    <div>ログ件数<br><strong><span id="logCount">0</span> 件</strong></div>
-  </div>
-
-  <div class="card">
-    <h2>月別レポート</h2>
-    <table>
-      <thead>
-        <tr>
-          <th>日付</th>
-          <th>出勤回数</th>
-          <th>稼働時間</th>
-          <th>休憩時間</th>
-          <th>ログ件数</th>
-        </tr>
-      </thead>
-      <tbody id="reportTable"></tbody>
-    </table>
-  </div>
-
-  <div class="card">
-    <h2>ログ一覧</h2>
-    <table>
-      <thead>
-        <tr>
-          <th>ID</th>
-          <th>日時</th>
-          <th>状態</th>
-          <th>セッション</th>
-          <th>地図</th>
-        </tr>
-      </thead>
-      <tbody id="logsTable"></tbody>
-    </table>
-  </div>
-
-  <div class="card">
-    <h2>通信結果</h2>
-    <pre id="message">未取得</pre>
-  </div>
-</main>
-
-<script>
-const API_URL = "https://fragrant-dew-8296.info-chibafukushi.workers.dev";
-let currentLogs = [];
-let currentReport = [];
-
-function pad(n){return String(n).padStart(2,"0");}
-function yyyyMM(d){return `${d.getFullYear()}-${pad(d.getMonth()+1)}`;}
-function labelStatus(s){
-  if(s==="ON") return "業務中";
-  if(s==="BREAK") return "休憩中";
-  if(s==="OFF") return "退勤";
-  return s;
-}
-function minText(m){
-  const h=Math.floor(m/60);
-  const r=m%60;
-  return h>0 ? `${h}時間${r}分` : `${r}分`;
-}
-document.getElementById("monthInput").value = yyyyMM(new Date());
-
-async function loadReport(){
-  const month=document.getElementById("monthInput").value;
-  const res=await fetch(`${API_URL}/report?month=${encodeURIComponent(month)}`);
-  const data=await res.json();
-
-  currentLogs=data.logs || [];
-  currentReport=data.daily || [];
-
-  document.getElementById("message").textContent=JSON.stringify(data.meta || {},null,2);
-
-  document.getElementById("sessionCount").textContent=data.summary?.session_count || 0;
-  document.getElementById("workTotal").textContent=minText(data.summary?.work_minutes || 0);
-  document.getElementById("breakTotal").textContent=minText(data.summary?.break_minutes || 0);
-  document.getElementById("logCount").textContent=data.summary?.log_count || 0;
-
-  renderReport();
-  renderLogs();
-}
-
-function renderReport(){
-  const tbody=document.getElementById("reportTable");
-  tbody.innerHTML="";
-  currentReport.forEach(r=>{
-    tbody.innerHTML += `
-      <tr>
-        <td>${r.date}</td>
-        <td>${r.session_count}</td>
-        <td>${minText(r.work_minutes)}</td>
-        <td>${minText(r.break_minutes)}</td>
-        <td>${r.log_count}</td>
-      </tr>
-    `;
-  });
-}
-
-function renderLogs(){
-  const tbody=document.getElementById("logsTable");
-  tbody.innerHTML="";
-  currentLogs.forEach(l=>{
-    const d=new Date(l.time);
-    const map = l.lat && l.lng ? `<button onclick="window.open('https://www.google.com/maps?q=${l.lat},${l.lng}','_blank')">表示</button>` : "位置なし";
-    tbody.innerHTML += `
-      <tr>
-        <td>${l.id}</td>
-        <td>${d.toLocaleString()}</td>
-        <td>${labelStatus(l.status)}</td>
-        <td>${l.session_id || ""}</td>
-        <td>${map}</td>
-      </tr>
-    `;
-  });
-}
-
-function escapeCSV(v){
-  const s=String(v ?? "");
-  return `"${s.replace(/"/g,'""')}"`;
-}
-
-function downloadCSV(){
-  const rows=[["ID","日時","状態","セッションID","緯度","経度"]];
-  currentLogs.forEach(l=>{
-    rows.push([l.id,new Date(l.time).toLocaleString(),labelStatus(l.status),l.session_id || "",l.lat || "",l.lng || ""]);
-  });
-  const csv="\uFEFF"+rows.map(r=>r.map(escapeCSV).join(",")).join("\n");
-  const blob=new Blob([csv],{type:"text/csv;charset=utf-8"});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement("a");
-  a.href=url;
-  a.download=`timecard_${document.getElementById("monthInput").value}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-loadReport();
-</script>
-</body>
-</html>
+:root{--bg:#f6f7fb;--card:#fff;--text:#1f2937;--muted:#6b7280;--main:#2563eb;--line:#e5e7eb}*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text)}.wrap{max-width:1160px;margin:0 auto;padding:18px}.card{background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:0 8px 24px rgba(15,23,42,.06);padding:18px;margin:14px 0}h1{font-size:24px;margin:0 0 6px}.sub{color:var(--muted);font-size:14px}.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.stat{background:#f8fafc;border:1px solid var(--line);border-radius:14px;padding:12px}.stat b{display:block;font-size:20px;margin-top:4px}input,select{border:1px solid var(--line);border-radius:12px;padding:12px;font-size:16px;background:#fff}button{border:0;border-radius:12px;padding:12px 14px;background:var(--main);color:#fff;font-weight:700;cursor:pointer}.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}table{width:100%;border-collapse:collapse;font-size:13px}th,td{border-bottom:1px solid var(--line);padding:8px;text-align:left}th{color:var(--muted);font-weight:700;background:#f8fafc}@media(max-width:760px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.wrap{padding:12px}}
+</style></head><body><div class="wrap">
+<div class="card"><h1>タイムカード管理画面</h1><p class="sub">Cloudflare Accessでこの画面を保護してください。</p><div class="row"><input id="month" type="month" /><select id="userFilter"><option value="">全従業員</option></select><button id="loadBtn">表示</button><button id="csvBtn">CSV出力</button></div></div>
+<div class="card"><h2>月別レポート</h2><div class="grid"><div class="stat">出勤回数<b id="sessions">0</b></div><div class="stat">総稼働時間<b id="work">0:00</b></div><div class="stat">総休憩時間<b id="break">0:00</b></div><div class="stat">売上合計<b id="sales">0 円</b></div><div class="stat">総距離<b id="distance">0.00 km</b></div><div class="stat">運行売上<b id="fare">0 円</b></div><div class="stat">総合計<b id="total">0 円</b></div><div class="stat">平均単価<b id="avg">0 円</b></div></div></div>
+<div class="card"><h2>日別集計</h2><table><thead><tr><th>日付</th><th>ID</th><th>氏名</th><th>稼働</th><th>休憩</th><th>距離</th><th>売上</th></tr></thead><tbody id="dailyBody"></tbody></table></div>
+<div class="card"><h2>ログ一覧</h2><table><thead><tr><th>日時</th><th>ID</th><th>氏名</th><th>状態</th><th>緯度</th><th>経度</th><th>session</th></tr></thead><tbody id="logBody"></tbody></table></div>
+</div><script>
+const API_BASE="https://YOUR-WORKER-DOMAIN.workers.dev";
+const $=id=>document.getElementById(id);let lastReport=null;function pad(n){return String(n).padStart(2,"0")}function fmtHM(ms){const m=Math.max(0,Math.floor(ms/60000));return `${Math.floor(m/60)}:${pad(m%60)}`}function yen(n){return `${Math.round(n||0).toLocaleString("ja-JP")} 円`}function thisMonth(){const d=new Date();return `${d.getFullYear()}-${pad(d.getMonth()+1)}`}function esc(v){return String(v??"").replaceAll('"','""')}
+async function load(){const m=$("month").value||thisMonth();const u=$("userFilter").value;const url=new URL(`${API_BASE}/report`);url.searchParams.set("month",m);if(u)url.searchParams.set("user_id",u);const r=await fetch(url);lastReport=await r.json();render(lastReport)}
+function render(data){$("sessions").textContent=data.summary.sessions;$("work").textContent=fmtHM(data.summary.work_ms);$("break").textContent=fmtHM(data.summary.break_ms);$("sales").textContent=yen(data.summary.sales);$("distance").textContent=`${Number(data.summary.distance_km||0).toFixed(2)} km`;$("fare").textContent=yen(data.summary.fare);$("total").textContent=yen(data.summary.total);$("avg").textContent=yen(data.summary.avg_unit);$("dailyBody").innerHTML=data.daily.map(d=>`<tr><td>${d.date}</td><td>${d.user_id||""}</td><td>${d.user_name||""}</td><td>${fmtHM(d.work_ms)}</td><td>${fmtHM(d.break_ms)}</td><td>${Number(d.distance_km||0).toFixed(2)} km</td><td>${yen(d.total)}</td></tr>`).join("");$("logBody").innerHTML=data.logs.map(l=>`<tr><td>${l.time}</td><td>${l.user_id||""}</td><td>${l.user_name||""}</td><td>${l.status}</td><td>${l.lat??""}</td><td>${l.lng??""}</td><td>${l.session_id}</td></tr>`).join("");const users=[...new Map(data.logs.map(l=>[l.user_id,l.user_name])).entries()].filter(x=>x[0]);const cur=$("userFilter").value;$("userFilter").innerHTML='<option value="">全従業員</option>'+users.map(([id,name])=>`<option value="${id}">${id} ${name}</option>`).join("");$("userFilter").value=cur;}
+function csv(){if(!lastReport)return;const rows=[["日付","ID","氏名","稼働時間","休憩時間","距離km","売上"],...lastReport.daily.map(d=>[d.date,d.user_id,d.user_name,fmtHM(d.work_ms),fmtHM(d.break_ms),Number(d.distance_km||0).toFixed(2),Math.round(d.total||0)])];const text='\ufeff'+rows.map(r=>r.map(v=>`"${esc(v)}"`).join(',')).join('\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type:'text/csv'}));a.download=`timecard-${$("month").value||thisMonth()}.csv`;a.click();}
+$("month").value=thisMonth();$("loadBtn").onclick=load;$("csvBtn").onclick=csv;load();
+</script></body></html>
