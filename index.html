@@ -10,6 +10,8 @@ body { font-family: sans-serif; padding:20px; }
 button { margin:5px; padding:10px; }
 table { border-collapse: collapse; margin-top:20px; width:100%; }
 th, td { border:1px solid #ccc; padding:8px; text-align:center; }
+#map { height:300px; margin-top:20px; }
+.summary { margin-top:20px; font-weight:bold; }
 </style>
 </head>
 <body>
@@ -23,6 +25,11 @@ th, td { border:1px solid #ccc; padding:8px; text-align:center; }
 <button onclick="resumeWork()">再開</button>
 <button onclick="endWork()">退勤</button>
 
+<div class="summary">
+稼働時間：<span id="workTime">0</span> 分　
+休憩時間：<span id="breakTime">0</span> 分
+</div>
+
 <table>
 <thead>
 <tr>
@@ -30,17 +37,22 @@ th, td { border:1px solid #ccc; padding:8px; text-align:center; }
 <th>時刻</th>
 <th>状態</th>
 <th>移動時間(分)</th>
+<th>地図</th>
 </tr>
 </thead>
 <tbody id="logTable"></tbody>
 </table>
 
+<div id="map"></div>
+
 <script>
 
 let status="OFF";
 let logs=[];
+let map;
+let marker;
 
-// 現在時刻表示
+// 現在時刻
 function updateClock(){
  const now=new Date();
  document.getElementById("now").innerText=
@@ -48,7 +60,7 @@ function updateClock(){
 }
 setInterval(updateClock,1000);
 
-// GPS取得
+// GPS
 function getLocation(){
  return new Promise((resolve)=>{
   navigator.geolocation.getCurrentPosition(pos=>{
@@ -73,14 +85,15 @@ async function addLog(){
  });
 
  renderTable();
+ calcSummary();
 }
 
-// ボタン処理
+// ボタン
 function startWork(){ status="ON"; addLog(); }
 function startBreak(){ status="BREAK"; addLog(); }
 function resumeWork(){ status="ON"; addLog(); }
 
-// 退勤＋クラウド送信
+// 退勤＋クラウド
 async function endWork(){
  status="OFF";
  await addLog();
@@ -94,9 +107,10 @@ async function endWork(){
  alert("クラウド保存完了");
  logs=[];
  renderTable();
+ calcSummary();
 }
 
-// テーブル表示（移動時間計算）
+// 表描画
 function renderTable(){
  const tbody=document.getElementById("logTable");
  tbody.innerHTML="";
@@ -106,10 +120,9 @@ function renderTable(){
   const d=new Date(log.time);
 
   let moveTime=0;
-
   if(i>0){
    const prev=new Date(logs[i-1].time);
-   moveTime=Math.floor((d-prev)/1000/60); // 分
+   moveTime=Math.floor((d-prev)/1000/60);
   }
 
   const row=`
@@ -118,11 +131,36 @@ function renderTable(){
     <td>${d.toLocaleTimeString()}</td>
     <td>${log.status}</td>
     <td>${moveTime}</td>
+    <td><button onclick="showMap(${log.lat}, ${log.lng})">表示</button></td>
    </tr>
   `;
-
   tbody.innerHTML+=row;
  }
+}
+
+// 集計（ここが重要）
+function calcSummary(){
+ let work=0;
+ let rest=0;
+
+ for(let i=1;i<logs.length;i++){
+  const prev=logs[i-1];
+  const now=logs[i];
+
+  const diff=Math.floor((new Date(now.time)-new Date(prev.time))/1000/60);
+
+  if(prev.status==="ON") work+=diff;
+  if(prev.status==="BREAK") rest+=diff;
+ }
+
+ document.getElementById("workTime").innerText=work;
+ document.getElementById("breakTime").innerText=rest;
+}
+
+// 地図表示（Google Mapリンク式）
+function showMap(lat,lng){
+ const url=`https://www.google.com/maps?q=${lat},${lng}`;
+ window.open(url,"_blank");
 }
 
 </script>
