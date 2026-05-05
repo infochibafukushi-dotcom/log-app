@@ -3,167 +3,274 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ログアプリ</title>
-
+<title>タイムカード</title>
 <style>
-body { font-family: sans-serif; padding:20px; }
-button { margin:5px; padding:10px; }
-table { border-collapse: collapse; margin-top:20px; width:100%; }
-th, td { border:1px solid #ccc; padding:8px; text-align:center; }
-#map { height:300px; margin-top:20px; }
-.summary { margin-top:20px; font-weight:bold; }
+body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;background:#f5f7fb;color:#111827}
+header{background:#0f172a;color:#fff;padding:16px}
+main{padding:16px;max-width:960px;margin:auto}
+.card{background:#fff;border-radius:14px;padding:16px;margin:12px 0;box-shadow:0 2px 10px rgba(0,0,0,.06)}
+h1{font-size:22px;margin:0}
+.now{font-size:18px;font-weight:700;margin-top:8px}
+.status{font-size:18px;font-weight:700}
+.btns{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+button{border:0;border-radius:12px;padding:14px;font-size:16px;font-weight:700;cursor:pointer}
+.primary{background:#2563eb;color:#fff}
+.warning{background:#f59e0b;color:#111827}
+.success{background:#16a34a;color:#fff}
+.danger{background:#dc2626;color:#fff}
+.gray{background:#e5e7eb;color:#111827}
+.summary{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.summary div{background:#f1f5f9;border-radius:12px;padding:12px}
+table{width:100%;border-collapse:collapse;background:#fff}
+th,td{border-bottom:1px solid #e5e7eb;padding:8px;text-align:center;font-size:13px}
+th{background:#f8fafc}
+.small{font-size:12px;color:#64748b}
+.notice{white-space:pre-wrap;background:#f8fafc;border-radius:12px;padding:12px;font-size:13px}
 </style>
 </head>
 <body>
+<header>
+  <h1>タイムカード</h1>
+  <div class="now" id="now">--</div>
+</header>
 
-<h2>稼働ログ</h2>
+<main>
+  <div class="card">
+    <div class="status">状態：<span id="statusText">退勤中</span></div>
+    <div class="small">出勤・休憩・再開・退勤を押すと、時刻と位置情報を記録します。</div>
+  </div>
 
-<div id="now"></div>
+  <div class="card">
+    <div class="btns">
+      <button class="primary" onclick="startWork()">出勤</button>
+      <button class="warning" onclick="startBreak()">休憩開始</button>
+      <button class="success" onclick="resumeWork()">業務再開</button>
+      <button class="danger" onclick="endWork()">退勤・クラウド保存</button>
+    </div>
+  </div>
 
-<button onclick="startWork()">出勤</button>
-<button onclick="startBreak()">休憩</button>
-<button onclick="resumeWork()">再開</button>
-<button onclick="endWork()">退勤</button>
+  <div class="card summary">
+    <div>稼働時間<br><strong><span id="workTime">0</span> 分</strong></div>
+    <div>休憩時間<br><strong><span id="breakTime">0</span> 分</strong></div>
+  </div>
 
-<div class="summary">
-稼働時間：<span id="workTime">0</span> 分　
-休憩時間：<span id="breakTime">0</span> 分
-</div>
+  <div class="card">
+    <button class="gray" onclick="openLatestLocation()">最新位置を地図で開く</button>
+    <button class="gray" onclick="clearLocalLogs()">端末内ログ削除</button>
+  </div>
 
-<table>
-<thead>
-<tr>
-<th>日付</th>
-<th>時刻</th>
-<th>状態</th>
-<th>移動時間(分)</th>
-<th>地図</th>
-</tr>
-</thead>
-<tbody id="logTable"></tbody>
-</table>
+  <div class="card">
+    <h2>本日のログ</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>日付</th>
+          <th>時刻</th>
+          <th>状態</th>
+          <th>前回差分</th>
+          <th>地図</th>
+        </tr>
+      </thead>
+      <tbody id="logTable"></tbody>
+    </table>
+  </div>
 
-<div id="map"></div>
+  <div class="card">
+    <h2>送信結果</h2>
+    <div id="message" class="notice">未送信</div>
+  </div>
+</main>
 
 <script>
+const API_URL = "https://fragrant-dew-8296.info-chibafukushi.workers.dev";
 
-let status="OFF";
-let logs=[];
-let map;
-let marker;
+let status = localStorage.getItem("timecard_status") || "OFF";
+let logs = JSON.parse(localStorage.getItem("timecard_logs") || "[]");
+let sessionId = localStorage.getItem("timecard_session_id") || "";
 
-// 現在時刻
+function pad(n){return String(n).padStart(2,"0");}
+function formatDate(d){return `${d.getFullYear()}/${pad(d.getMonth()+1)}/${pad(d.getDate())}`;}
+function formatTime(d){return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;}
+function labelStatus(s){
+  if(s==="ON") return "業務中";
+  if(s==="BREAK") return "休憩中";
+  if(s==="OFF") return "退勤";
+  return s;
+}
 function updateClock(){
- const now=new Date();
- document.getElementById("now").innerText=
-  now.toLocaleDateString()+" "+now.toLocaleTimeString();
+  const now=new Date();
+  document.getElementById("now").textContent = `${formatDate(now)} ${formatTime(now)}`;
 }
 setInterval(updateClock,1000);
+updateClock();
 
-// GPS
+function updateStatus(){
+  document.getElementById("statusText").textContent = labelStatus(status);
+  localStorage.setItem("timecard_status", status);
+}
+updateStatus();
+
+function saveLocal(){
+  localStorage.setItem("timecard_logs", JSON.stringify(logs));
+  localStorage.setItem("timecard_session_id", sessionId);
+}
+
 function getLocation(){
- return new Promise((resolve)=>{
-  navigator.geolocation.getCurrentPosition(pos=>{
-   resolve({
-    lat:pos.coords.latitude,
-    lng:pos.coords.longitude
-   });
+  return new Promise((resolve)=>{
+    if(!navigator.geolocation){
+      resolve({lat:null,lng:null});
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      pos=>resolve({lat:pos.coords.latitude,lng:pos.coords.longitude}),
+      err=>resolve({lat:null,lng:null}),
+      {enableHighAccuracy:true,timeout:10000,maximumAge:30000}
+    );
   });
- });
 }
 
-// ログ追加
-async function addLog(){
- const loc=await getLocation();
- const time=new Date();
-
- logs.push({
-  time:time.toISOString(),
-  status,
-  lat:loc.lat,
-  lng:loc.lng
- });
-
- renderTable();
- calcSummary();
-}
-
-// ボタン
-function startWork(){ status="ON"; addLog(); }
-function startBreak(){ status="BREAK"; addLog(); }
-function resumeWork(){ status="ON"; addLog(); }
-
-// 退勤＋クラウド
-async function endWork(){
- status="OFF";
- await addLog();
-
- await fetch("https://fragrant-dew-8296.info-chibafukushi.workers.dev",{
-  method:"POST",
-  headers:{ "Content-Type":"application/json" },
-  body:JSON.stringify(logs)
- });
-
- alert("クラウド保存完了");
- logs=[];
- renderTable();
- calcSummary();
-}
-
-// 表描画
-function renderTable(){
- const tbody=document.getElementById("logTable");
- tbody.innerHTML="";
-
- for(let i=0;i<logs.length;i++){
-  const log=logs[i];
-  const d=new Date(log.time);
-
-  let moveTime=0;
-  if(i>0){
-   const prev=new Date(logs[i-1].time);
-   moveTime=Math.floor((d-prev)/1000/60);
+function createSessionIfNeeded(){
+  if(!sessionId){
+    sessionId = "session_" + Date.now() + "_" + Math.random().toString(36).slice(2);
+    localStorage.setItem("timecard_session_id", sessionId);
   }
-
-  const row=`
-   <tr>
-    <td>${d.toLocaleDateString()}</td>
-    <td>${d.toLocaleTimeString()}</td>
-    <td>${log.status}</td>
-    <td>${moveTime}</td>
-    <td><button onclick="showMap(${log.lat}, ${log.lng})">表示</button></td>
-   </tr>
-  `;
-  tbody.innerHTML+=row;
- }
 }
 
-// 集計（ここが重要）
+async function addLog(){
+  createSessionIfNeeded();
+  const loc = await getLocation();
+  const now = new Date();
+  logs.push({
+    session_id: sessionId,
+    time: now.toISOString(),
+    status,
+    lat: loc.lat,
+    lng: loc.lng
+  });
+  saveLocal();
+  render();
+}
+
+async function startWork(){
+  if(status !== "OFF"){
+    alert("すでに勤務中です。");
+    return;
+  }
+  status="ON";
+  updateStatus();
+  await addLog();
+}
+
+async function startBreak(){
+  if(status !== "ON"){
+    alert("業務中のみ休憩開始できます。");
+    return;
+  }
+  status="BREAK";
+  updateStatus();
+  await addLog();
+}
+
+async function resumeWork(){
+  if(status !== "BREAK"){
+    alert("休憩中のみ業務再開できます。");
+    return;
+  }
+  status="ON";
+  updateStatus();
+  await addLog();
+}
+
+async function endWork(){
+  if(status === "OFF"){
+    alert("出勤していません。");
+    return;
+  }
+  status="OFF";
+  updateStatus();
+  await addLog();
+
+  const payload = logs.slice();
+
+  try{
+    const res = await fetch(API_URL + "/logs", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify(payload)
+    });
+    const text = await res.text();
+    if(!res.ok) throw new Error(text);
+    document.getElementById("message").textContent = "クラウド保存完了\n" + text;
+    logs=[];
+    sessionId="";
+    saveLocal();
+    render();
+  }catch(e){
+    document.getElementById("message").textContent = "送信失敗。端末内ログは残っています。\n" + e.message;
+  }
+}
+
 function calcSummary(){
- let work=0;
- let rest=0;
-
- for(let i=1;i<logs.length;i++){
-  const prev=logs[i-1];
-  const now=logs[i];
-
-  const diff=Math.floor((new Date(now.time)-new Date(prev.time))/1000/60);
-
-  if(prev.status==="ON") work+=diff;
-  if(prev.status==="BREAK") rest+=diff;
- }
-
- document.getElementById("workTime").innerText=work;
- document.getElementById("breakTime").innerText=rest;
+  let work=0, rest=0;
+  for(let i=1;i<logs.length;i++){
+    const prev=logs[i-1];
+    const now=logs[i];
+    const diff=Math.max(0, Math.floor((new Date(now.time)-new Date(prev.time))/1000/60));
+    if(prev.status==="ON") work += diff;
+    if(prev.status==="BREAK") rest += diff;
+  }
+  document.getElementById("workTime").textContent = work;
+  document.getElementById("breakTime").textContent = rest;
 }
 
-// 地図表示（Google Mapリンク式）
+function render(){
+  const tbody=document.getElementById("logTable");
+  tbody.innerHTML="";
+  for(let i=0;i<logs.length;i++){
+    const log=logs[i];
+    const d=new Date(log.time);
+    let diff=0;
+    if(i>0){
+      diff=Math.max(0, Math.floor((d-new Date(logs[i-1].time))/1000/60));
+    }
+    const mapBtn = log.lat && log.lng ? `<button class="gray" onclick="showMap(${log.lat},${log.lng})">表示</button>` : "位置なし";
+    tbody.innerHTML += `
+      <tr>
+        <td>${formatDate(d)}</td>
+        <td>${formatTime(d)}</td>
+        <td>${labelStatus(log.status)}</td>
+        <td>${diff}分</td>
+        <td>${mapBtn}</td>
+      </tr>
+    `;
+  }
+  calcSummary();
+}
+
 function showMap(lat,lng){
- const url=`https://www.google.com/maps?q=${lat},${lng}`;
- window.open(url,"_blank");
+  window.open(`https://www.google.com/maps?q=${lat},${lng}`,"_blank");
 }
 
-</script>
+function openLatestLocation(){
+  const latest=[...logs].reverse().find(l=>l.lat&&l.lng);
+  if(!latest){alert("位置情報がありません");return;}
+  showMap(latest.lat, latest.lng);
+}
 
+function clearLocalLogs(){
+  if(!confirm("端末内ログを削除しますか？")) return;
+  logs=[];
+  sessionId="";
+  status="OFF";
+  localStorage.removeItem("timecard_logs");
+  localStorage.removeItem("timecard_session_id");
+  localStorage.setItem("timecard_status","OFF");
+  updateStatus();
+  render();
+  document.getElementById("message").textContent="端末内ログを削除しました";
+}
+
+render();
+</script>
 </body>
 </html>

@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>タイムカード管理画面</title>
+<style>
+body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;background:#f5f7fb;color:#111827}
+header{background:#0f172a;color:#fff;padding:16px}
+main{padding:16px;max-width:1100px;margin:auto}
+.card{background:#fff;border-radius:14px;padding:16px;margin:12px 0;box-shadow:0 2px 10px rgba(0,0,0,.06)}
+button,input{border-radius:10px;padding:10px;font-size:15px}
+button{border:0;background:#2563eb;color:#fff;font-weight:700;cursor:pointer}
+.gray{background:#64748b}
+table{width:100%;border-collapse:collapse;background:#fff;margin-top:12px}
+th,td{border-bottom:1px solid #e5e7eb;padding:8px;text-align:center;font-size:13px}
+th{background:#f8fafc}
+.summary{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.summary div{background:#f1f5f9;border-radius:12px;padding:12px}
+pre{white-space:pre-wrap;background:#f8fafc;padding:12px;border-radius:12px}
+@media(max-width:700px){.summary{grid-template-columns:1fr 1fr}table{font-size:12px}}
+</style>
+</head>
+<body>
+<header><h1>タイムカード管理画面</h1></header>
+<main>
+  <div class="card">
+    <label>対象月：</label>
+    <input type="month" id="monthInput">
+    <button onclick="loadReport()">月別レポート表示</button>
+    <button class="gray" onclick="downloadCSV()">CSV出力</button>
+  </div>
+
+  <div class="card summary">
+    <div>出勤回数<br><strong><span id="sessionCount">0</span> 回</strong></div>
+    <div>稼働時間<br><strong><span id="workTotal">0</span> 分</strong></div>
+    <div>休憩時間<br><strong><span id="breakTotal">0</span> 分</strong></div>
+    <div>ログ件数<br><strong><span id="logCount">0</span> 件</strong></div>
+  </div>
+
+  <div class="card">
+    <h2>月別レポート</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>日付</th>
+          <th>出勤回数</th>
+          <th>稼働時間</th>
+          <th>休憩時間</th>
+          <th>ログ件数</th>
+        </tr>
+      </thead>
+      <tbody id="reportTable"></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>ログ一覧</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>日時</th>
+          <th>状態</th>
+          <th>セッション</th>
+          <th>地図</th>
+        </tr>
+      </thead>
+      <tbody id="logsTable"></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>通信結果</h2>
+    <pre id="message">未取得</pre>
+  </div>
+</main>
+
+<script>
+const API_URL = "https://fragrant-dew-8296.info-chibafukushi.workers.dev";
+let currentLogs = [];
+let currentReport = [];
+
+function pad(n){return String(n).padStart(2,"0");}
+function yyyyMM(d){return `${d.getFullYear()}-${pad(d.getMonth()+1)}`;}
+function labelStatus(s){
+  if(s==="ON") return "業務中";
+  if(s==="BREAK") return "休憩中";
+  if(s==="OFF") return "退勤";
+  return s;
+}
+function minText(m){
+  const h=Math.floor(m/60);
+  const r=m%60;
+  return h>0 ? `${h}時間${r}分` : `${r}分`;
+}
+document.getElementById("monthInput").value = yyyyMM(new Date());
+
+async function loadReport(){
+  const month=document.getElementById("monthInput").value;
+  const res=await fetch(`${API_URL}/report?month=${encodeURIComponent(month)}`);
+  const data=await res.json();
+
+  currentLogs=data.logs || [];
+  currentReport=data.daily || [];
+
+  document.getElementById("message").textContent=JSON.stringify(data.meta || {},null,2);
+
+  document.getElementById("sessionCount").textContent=data.summary?.session_count || 0;
+  document.getElementById("workTotal").textContent=minText(data.summary?.work_minutes || 0);
+  document.getElementById("breakTotal").textContent=minText(data.summary?.break_minutes || 0);
+  document.getElementById("logCount").textContent=data.summary?.log_count || 0;
+
+  renderReport();
+  renderLogs();
+}
+
+function renderReport(){
+  const tbody=document.getElementById("reportTable");
+  tbody.innerHTML="";
+  currentReport.forEach(r=>{
+    tbody.innerHTML += `
+      <tr>
+        <td>${r.date}</td>
+        <td>${r.session_count}</td>
+        <td>${minText(r.work_minutes)}</td>
+        <td>${minText(r.break_minutes)}</td>
+        <td>${r.log_count}</td>
+      </tr>
+    `;
+  });
+}
+
+function renderLogs(){
+  const tbody=document.getElementById("logsTable");
+  tbody.innerHTML="";
+  currentLogs.forEach(l=>{
+    const d=new Date(l.time);
+    const map = l.lat && l.lng ? `<button onclick="window.open('https://www.google.com/maps?q=${l.lat},${l.lng}','_blank')">表示</button>` : "位置なし";
+    tbody.innerHTML += `
+      <tr>
+        <td>${l.id}</td>
+        <td>${d.toLocaleString()}</td>
+        <td>${labelStatus(l.status)}</td>
+        <td>${l.session_id || ""}</td>
+        <td>${map}</td>
+      </tr>
+    `;
+  });
+}
+
+function escapeCSV(v){
+  const s=String(v ?? "");
+  return `"${s.replace(/"/g,'""')}"`;
+}
+
+function downloadCSV(){
+  const rows=[["ID","日時","状態","セッションID","緯度","経度"]];
+  currentLogs.forEach(l=>{
+    rows.push([l.id,new Date(l.time).toLocaleString(),labelStatus(l.status),l.session_id || "",l.lat || "",l.lng || ""]);
+  });
+  const csv="\uFEFF"+rows.map(r=>r.map(escapeCSV).join(",")).join("\n");
+  const blob=new Blob([csv],{type:"text/csv;charset=utf-8"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url;
+  a.download=`timecard_${document.getElementById("monthInput").value}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+loadReport();
+</script>
+</body>
+</html>
