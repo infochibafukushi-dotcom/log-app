@@ -4,20 +4,51 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ログアプリ</title>
+
+<style>
+body { font-family: sans-serif; padding:20px; }
+button { margin:5px; padding:10px; }
+table { border-collapse: collapse; margin-top:20px; width:100%; }
+th, td { border:1px solid #ccc; padding:8px; text-align:center; }
+</style>
 </head>
 <body>
 
 <h2>稼働ログ</h2>
+
+<div id="now"></div>
 
 <button onclick="startWork()">出勤</button>
 <button onclick="startBreak()">休憩</button>
 <button onclick="resumeWork()">再開</button>
 <button onclick="endWork()">退勤</button>
 
+<table>
+<thead>
+<tr>
+<th>日付</th>
+<th>時刻</th>
+<th>状態</th>
+<th>移動時間(分)</th>
+</tr>
+</thead>
+<tbody id="logTable"></tbody>
+</table>
+
 <script>
+
 let status="OFF";
 let logs=[];
 
+// 現在時刻表示
+function updateClock(){
+ const now=new Date();
+ document.getElementById("now").innerText=
+  now.toLocaleDateString()+" "+now.toLocaleTimeString();
+}
+setInterval(updateClock,1000);
+
+// GPS取得
 function getLocation(){
  return new Promise((resolve)=>{
   navigator.geolocation.getCurrentPosition(pos=>{
@@ -29,46 +60,71 @@ function getLocation(){
  });
 }
 
+// ログ追加
 async function addLog(){
  const loc=await getLocation();
+ const time=new Date();
+
  logs.push({
-  time:new Date().toISOString(),
+  time:time.toISOString(),
   status,
   lat:loc.lat,
   lng:loc.lng
  });
+
+ renderTable();
 }
 
-function startWork(){
- status="ON";
- addLog();
-}
+// ボタン処理
+function startWork(){ status="ON"; addLog(); }
+function startBreak(){ status="BREAK"; addLog(); }
+function resumeWork(){ status="ON"; addLog(); }
 
-function startBreak(){
- status="BREAK";
- addLog();
-}
-
-function resumeWork(){
- status="ON";
- addLog();
-}
-
+// 退勤＋クラウド送信
 async function endWork(){
  status="OFF";
  await addLog();
 
  await fetch("https://fragrant-dew-8296.info-chibafukushi.workers.dev",{
   method:"POST",
-  headers:{
-   "Content-Type":"application/json"
-  },
+  headers:{ "Content-Type":"application/json" },
   body:JSON.stringify(logs)
  });
 
  alert("クラウド保存完了");
  logs=[];
+ renderTable();
 }
+
+// テーブル表示（移動時間計算）
+function renderTable(){
+ const tbody=document.getElementById("logTable");
+ tbody.innerHTML="";
+
+ for(let i=0;i<logs.length;i++){
+  const log=logs[i];
+  const d=new Date(log.time);
+
+  let moveTime=0;
+
+  if(i>0){
+   const prev=new Date(logs[i-1].time);
+   moveTime=Math.floor((d-prev)/1000/60); // 分
+  }
+
+  const row=`
+   <tr>
+    <td>${d.toLocaleDateString()}</td>
+    <td>${d.toLocaleTimeString()}</td>
+    <td>${log.status}</td>
+    <td>${moveTime}</td>
+   </tr>
+  `;
+
+  tbody.innerHTML+=row;
+ }
+}
+
 </script>
 
 </body>
