@@ -1,145 +1,145 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <title>ログアプリ</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>
-    body {
-      font-family: sans-serif;
-      text-align: center;
-      padding: 20px;
-    }
-    button {
-      font-size: 18px;
-      margin: 8px;
-      padding: 12px 20px;
-      width: 80%;
-      max-width: 300px;
-    }
-    .status {
-      font-size: 20px;
-      margin: 15px;
-    }
-    .result {
-      margin-top: 20px;
-      font-size: 16px;
-      text-align: left;
-      word-break: break-all;
-    }
-  </style>
+<meta charset="UTF-8">
+<title>ログアプリ</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+body{font-family:sans-serif;text-align:center;padding:20px;}
+button{font-size:18px;margin:8px;padding:12px;width:80%;}
+.status{font-size:20px;margin:10px;}
+.result{text-align:left;margin-top:20px;white-space:pre-wrap;}
+</style>
 </head>
 <body>
 
-  <h2>稼働ログアプリ</h2>
+<h2>稼働ログ</h2>
+<div class="status">状態：<span id="status">OFF</span></div>
 
-  <div class="status">状態：<span id="status">OFF</span></div>
+<button onclick="startWork()">出勤</button>
+<button onclick="startBreak()">休憩</button>
+<button onclick="resumeWork()">再開</button>
+<button onclick="endWork()">退勤</button>
 
-  <button onclick="startWork()">出勤</button>
-  <button onclick="startBreak()">休憩開始</button>
-  <button onclick="resumeWork()">業務再開</button>
-  <button onclick="endWork()">退勤</button>
+<hr>
 
-  <hr>
+<button onclick="openLatestLocation()">地図で開く</button>
+<button onclick="clearLogs()">ログ削除</button>
 
-  <button onclick="openLatestLocation()">現在地を地図で開く</button>
-  <button onclick="clearLogs()">ログ削除</button>
-
-  <div class="result" id="result"></div>
+<div id="result" class="result"></div>
 
 <script>
-let status = "OFF";
-let intervalId = null;
+let status="OFF";
+let intervalId=null;
 
-function updateStatus() {
-  document.getElementById("status").innerText = status;
+function updateStatus(){
+ document.getElementById("status").innerText=status;
 }
 
-function saveLog(lat = null, lng = null) {
-  const logs = JSON.parse(localStorage.getItem("logs") || "[]");
-
-  logs.push({
-    time: new Date().toISOString(),
-    status: status,
-    lat: lat,
-    lng: lng
-  });
-
-  localStorage.setItem("logs", JSON.stringify(logs));
+function saveLog(lat=null,lng=null){
+ let logs=JSON.parse(localStorage.getItem("logs")||"[]");
+ logs.push({
+  time:new Date().toISOString(),
+  status,
+  lat,
+  lng
+ });
+ localStorage.setItem("logs",JSON.stringify(logs));
 }
 
-function getLocationAndSave() {
-  navigator.geolocation.getCurrentPosition(pos => {
-    saveLog(pos.coords.latitude, pos.coords.longitude);
-  }, () => {
-    saveLog();
-  });
+function getLocation(){
+ navigator.geolocation.getCurrentPosition(pos=>{
+  saveLog(pos.coords.latitude,pos.coords.longitude);
+ });
 }
 
-function startGPS() {
-  if (intervalId) return;
-  intervalId = setInterval(getLocationAndSave, 60000);
+function startGPS(){
+ if(intervalId) return;
+ intervalId=setInterval(getLocation,60000);
 }
 
-function stopGPS() {
-  clearInterval(intervalId);
-  intervalId = null;
+function stopGPS(){
+ clearInterval(intervalId);
+ intervalId=null;
 }
 
-function startWork() {
-  status = "ON";
-  updateStatus();
-  getLocationAndSave();
-  startGPS();
+function startWork(){
+ status="ON";
+ updateStatus();
+ getLocation();
+ startGPS();
 }
 
-function startBreak() {
-  status = "BREAK";
-  updateStatus();
-  getLocationAndSave();
+function startBreak(){
+ status="BREAK";
+ updateStatus();
+ getLocation();
 }
 
-function resumeWork() {
-  status = "ON";
-  updateStatus();
-  getLocationAndSave();
+function resumeWork(){
+ status="ON";
+ updateStatus();
+ getLocation();
 }
 
-function endWork() {
-  status = "OFF";
-  updateStatus();
-  getLocationAndSave();
-  stopGPS();
-  showLogs();
+function endWork(){
+ status="OFF";
+ updateStatus();
+ getLocation();
+ stopGPS();
+ showLogs();
 }
 
-function showLogs() {
-  const logs = JSON.parse(localStorage.getItem("logs") || "[]");
-  document.getElementById("result").innerText = JSON.stringify(logs, null, 2);
+function clearLogs(){
+ localStorage.removeItem("logs");
+ document.getElementById("result").innerText="削除完了";
 }
 
-function clearLogs() {
-  localStorage.removeItem("logs");
-  document.getElementById("result").innerText = "ログ削除しました";
+function openLatestLocation(){
+ let logs=JSON.parse(localStorage.getItem("logs")||"[]");
+ let last=logs[logs.length-1];
+ if(!last||!last.lat) return alert("位置なし");
+ let url=`https://www.google.com/maps?q=${last.lat},${last.lng}`;
+ window.open(url,"_blank");
 }
 
-function openLatestLocation() {
-  const logs = JSON.parse(localStorage.getItem("logs") || "[]");
+async function getAddress(lat,lng){
+ try{
+  let res=await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
+  let data=await res.json();
 
-  if (logs.length === 0) {
-    alert("ログがありません");
-    return;
+  let a=data.address;
+
+  // 表示用（ざっくり）
+  return `${a.city||a.town||""}${a.suburb||""}付近`;
+
+ }catch(e){
+  return "取得失敗";
+ }
+}
+
+async function showLogs(){
+ let logs=JSON.parse(localStorage.getItem("logs")||"[]");
+
+ let text="";
+
+ for(let i=logs.length-1;i>=0;i--){
+  let l=logs[i];
+
+  let addr="";
+
+  if(l.lat){
+   addr=await getAddress(l.lat,l.lng);
   }
 
-  const latest = logs[logs.length - 1];
+  text+=`
+${l.time}
+状態:${l.status}
+場所:${addr}
+--------------------`;
+ }
 
-  if (!latest.lat || !latest.lng) {
-    alert("位置情報がありません");
-    return;
-  }
-
-  const url = `https://www.google.com/maps?q=${latest.lat},${latest.lng}`;
-  window.open(url, "_blank");
+ document.getElementById("result").innerText=text;
 }
 
 updateStatus();
